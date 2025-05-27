@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voice Call</title>
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <h2>Voice Call</h2>
+  <button onclick="call()">Call</button>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const myID = urlParams.get('caller');
+    const targetID = urlParams.get('receiver');
+
+    const peer = new Peer(myID);
+
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
+      peer.on('call', (call) => {
+        call.answer(stream);
+        call.on('stream', (remoteStream) => {
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play();
+        });
+      });
+
+      window.call = () => {
+        const call = peer.call(targetID, stream);
+        call.on('stream', (remoteStream) => {
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play();
+        });
+      };
+    });
+  </script>
+</body>
+</html>
