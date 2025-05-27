@@ -1,204 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Voice Call</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Call App</title>
   <style>
-    body { font-family: sans-serif; background: #0b0b0b; color: #fff; text-align: center; padding: 20px; }
-    input, button { padding: 10px; margin: 8px; border-radius: 8px; font-size: 16px; border: none; width: 80%; max-width: 300px; }
-    button { background: #0f9d58; color: #fff; cursor: pointer; }
+    body { font-family: sans-serif; text-align: center; background: #f5f5f5; margin: 0; padding: 20px; }
     .hidden { display: none; }
-    .info, h2 { margin-top: 10px; }
-    .ringing { background: #111; padding: 20px; border-radius: 15px; margin-top: 20px; }
-    .timer { font-size: 18px; margin-top: 5px; }
-    .avatars { display: flex; justify-content: center; gap: 30px; margin: 10px 0; }
-    .avatar { width: 70px; height: 70px; background: #444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; color: white; }
+    .card { background: #fff; padding: 20px; border-radius: 10px; max-width: 400px; margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; }
+    video { width: 100%; max-height: 200px; border-radius: 10px; margin-top: 10px; }
+    .avatar { font-size: 2em; margin: 10px; background: #ddd; border-radius: 50%; width: 50px; height: 50px; line-height: 50px; display: inline-block; }
+    .status { font-size: 1.2em; margin: 10px 0; }
   </style>
 </head>
 <body>
-
-<h2>Free Voice Call</h2>
-
-<!-- Call Setup -->
-<div id="setup">
-  <input id="myId" placeholder="Create Room ID" />
-  <button id="createBtn">Create</button>
-  <hr style="width:80%;" />
-  <input id="joinId" placeholder="Join Room ID" />
-  <button id="joinBtn">Join</button>
-</div>
-
-<!-- Incoming Ringing -->
-<div id="ringingUI" class="ringing hidden">
-  <h3>Incoming Call...</h3>
-  <audio id="ringtone" loop>
-    <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" type="audio/ogg" />
-  </audio>
-  <button id="acceptBtn">Accept</button>
-  <button id="rejectBtn">Reject</button>
-</div>
-
-<!-- Call UI -->
-<div id="callUI" class="hidden">
-  <div class="avatars">
-    <div id="youAvatar" class="avatar">U</div>
-    <div id="peerAvatar" class="avatar">P</div>
+  <div class="card" id="setupUI">
+    <h2>Start a Voice Call</h2>
+    <input id="myId" type="text" placeholder="Your Room ID" />
+    <button id="createBtn">Create Room</button>
+    <input id="joinId" type="text" placeholder="Enter Room to Join" />
+    <button id="joinBtn">Join Room</button>
+    <div class="status" id="status">Initializing...</div>
   </div>
-  <div class="info" id="roomInfo"></div>
-  <div class="info" id="status">Connecting...</div>
-  <div class="info" id="users">Joined Users: 1</div>
-  <div class="timer" id="callTimer">00:00</div>
-  <button id="micBtn">Mic On</button>
-  <button id="disconnectBtn">Disconnect</button>
-</div>
 
-<audio id="remoteAudio" autoplay></audio>
+  <div class="card hidden" id="callUI">
+    <div id="roomInfo"></div>
+    <div class="avatar" id="youAvatar"></div>
+    <div class="avatar" id="peerAvatar"></div>
+    <video id="localVideo" muted autoplay playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+    <div id="joinedUsers">Users: 1</div>
+    <button id="shareBtn">Share</button>
+  </div>
 
-<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-<script>
-let peer, localStream, currentCall, timerInterval, seconds = 0;
-let userCount = 1;
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script>
+    const createBtn = document.getElementById("createBtn");
+    const joinBtn = document.getElementById("joinBtn");
+    const myId = document.getElementById("myId");
+    const joinId = document.getElementById("joinId");
+    const setupUI = document.getElementById("setupUI");
+    const callUI = document.getElementById("callUI");
+    const localVideo = document.getElementById("localVideo");
+    const remoteVideo = document.getElementById("remoteVideo");
+    const roomInfo = document.getElementById("roomInfo");
+    const youAvatar = document.getElementById("youAvatar");
+    const peerAvatar = document.getElementById("peerAvatar");
+    const status = document.getElementById("status");
+    const shareBtn = document.getElementById("shareBtn");
+    const joinedUsers = document.getElementById("joinedUsers");
 
-const createBtn = document.getElementById("createBtn");
-const joinBtn = document.getElementById("joinBtn");
-const myIdInput = document.getElementById("myId");
-const joinIdInput = document.getElementById("joinId");
+    let localStream;
+    let peer;
+    let currentCall;
 
-const ringtone = document.getElementById("ringtone");
-const acceptBtn = document.getElementById("acceptBtn");
-const rejectBtn = document.getElementById("rejectBtn");
+    async function getMic() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        localVideo.srcObject = localStream;
+        return true;
+      } catch (e) {
+        alert("Mic access required!");
+        return false;
+      }
+    }
 
-const setupUI = document.getElementById("setup");
-const ringingUI = document.getElementById("ringingUI");
-const callUI = document.getElementById("callUI");
+    createBtn.onclick = async () => {
+      if (!myId.value) return alert("Enter a Room ID to Create");
+      if (!await getMic()) return;
 
-const roomInfo = document.getElementById("roomInfo");
-const status = document.getElementById("status");
-const users = document.getElementById("users");
-const callTimer = document.getElementById("callTimer");
+      peer = new Peer(myId.value);
 
-const youAvatar = document.getElementById("youAvatar");
-const peerAvatar = document.getElementById("peerAvatar");
-
-const micBtn = document.getElementById("micBtn");
-const disconnectBtn = document.getElementById("disconnectBtn");
-const remoteAudio = document.getElementById("remoteAudio");
-
-function startTimer() {
-  seconds = 0;
-  timerInterval = setInterval(() => {
-    seconds++;
-    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
-    const s = String(seconds % 60).padStart(2, '0');
-    callTimer.innerText = `${m}:${s}`;
-  }, 1000);
-}
-
-function stopTimer() {
-  clearInterval(timerInterval);
-  callTimer.innerText = "00:00";
-}
-
-async function getMic() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    return true;
-  } catch {
-    alert("Mic access denied!");
-    return false;
-  }
-}
-
-function setAvatars(myId, peerId) {
-  youAvatar.textContent = myId.slice(0, 2).toUpperCase();
-  peerAvatar.textContent = peerId ? peerId.slice(0, 2).toUpperCase() : "--";
-}
-
-createBtn.onclick = async () => {
-  const id = myIdInput.value.trim();
-  if (!id) return alert("Enter your ID to create room.");
-  if (!await getMic()) return;
-
-  peer = new Peer(id);
-  peer.on("open", () => {
-    setupUI.classList.add("hidden");
-    status.innerText = "Room Created. Waiting for call...";
-    roomInfo.innerText = "Room ID: " + id;
-    youAvatar.textContent = id.slice(0, 2).toUpperCase();
-  });
-
-  peer.on("call", call => {
-    ringtone.play();
-    ringingUI.classList.remove("hidden");
-
-    acceptBtn.onclick = () => {
-      ringtone.pause(); ringtone.currentTime = 0;
-      ringingUI.classList.add("hidden");
-
-      call.answer(localStream);
-      call.on("stream", stream => {
-        connected(stream, id, call.peer);
+      peer.on("open", () => {
+        setupUI.classList.add("hidden");
+        callUI.classList.remove("hidden");
+        status.innerText = "Room Created. Waiting for call...";
+        roomInfo.innerText = "Room ID: " + myId.value;
+        youAvatar.textContent = myId.value.slice(0, 2).toUpperCase();
       });
-      currentCall = call;
+
+      peer.on("call", call => {
+        currentCall = call;
+        call.answer(localStream);
+        call.on("stream", stream => remoteVideo.srcObject = stream);
+        status.innerText = "Call Connected";
+        peerAvatar.textContent = call.peer.slice(0, 2).toUpperCase();
+        joinedUsers.innerText = "Users: 2";
+      });
+
+      peer.on("error", e => alert("Error: " + e));
     };
 
-    rejectBtn.onclick = () => {
-      ringtone.pause(); ringtone.currentTime = 0;
-      ringingUI.classList.add("hidden");
-      call.close();
-      status.innerText = "Call rejected.";
+    joinBtn.onclick = async () => {
+      if (!joinId.value) return alert("Enter Room ID to Join");
+      if (!await getMic()) return;
+
+      peer = new Peer();
+      peer.on("open", () => {
+        const call = peer.call(joinId.value, localStream);
+        currentCall = call;
+        call.on("stream", stream => remoteVideo.srcObject = stream);
+
+        setupUI.classList.add("hidden");
+        callUI.classList.remove("hidden");
+        status.innerText = "Connected to Room";
+        roomInfo.innerText = "Room ID: " + joinId.value;
+        youAvatar.textContent = peer.id.slice(0, 2).toUpperCase();
+        peerAvatar.textContent = joinId.value.slice(0, 2).toUpperCase();
+        joinedUsers.innerText = "Users: 2";
+      });
+
+      peer.on("error", e => alert("Error: " + e));
     };
-  });
-};
 
-joinBtn.onclick = async () => {
-  const id = joinIdInput.value.trim();
-  if (!id) return alert("Enter Room ID.");
-  if (!await getMic()) return;
+    shareBtn.onclick = () => {
+      const id = myId.value || joinId.value || "";
+      if (!id) return alert("No room to share");
+      const url = location.origin + location.pathname + "?room=" + id;
+      navigator.share ? navigator.share({ title: "Join My Call", url }) : prompt("Copy link:", url);
+    };
 
-  peer = new Peer();
-  peer.on("open", () => {
-    const call = peer.call(id, localStream);
-    call.on("stream", stream => {
-      connected(stream, id, peer.id);
-    });
-    currentCall = call;
-  });
-};
-
-function connected(stream, id, peerId) {
-  setupUI.classList.add("hidden");
-  ringingUI.classList.add("hidden");
-  callUI.classList.remove("hidden");
-  remoteAudio.srcObject = stream;
-  roomInfo.innerText = "Room ID: " + id;
-  status.innerText = "Connected";
-  userCount = 2;
-  users.innerText = "Joined Users: " + userCount;
-  setAvatars(id, peerId);
-  startTimer();
-}
-
-micBtn.onclick = () => {
-  const track = localStream.getAudioTracks()[0];
-  track.enabled = !track.enabled;
-  micBtn.innerText = track.enabled ? "Mic On" : "Mic Off";
-};
-
-disconnectBtn.onclick = () => {
-  if (currentCall) currentCall.close();
-  stopTimer();
-  status.innerText = "Call Ended.";
-  users.innerText = "Joined Users: 1";
-  callUI.classList.add("hidden");
-};
-
-const urlParams = new URLSearchParams(location.search);
-const room = urlParams.get("room");
-if (room) {
-  joinIdInput.value = room;
-  joinBtn.click();
-}
-</script>
+    // Auto join if ?room= present
+    const urlRoom = new URLSearchParams(location.search).get("room");
+    if (urlRoom) {
+      joinId.value = urlRoom;
+      joinBtn.click();
+    }
+  </script>
 </body>
 </html>
