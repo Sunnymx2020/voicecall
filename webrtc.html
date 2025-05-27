@@ -5,28 +5,32 @@
   <title>Voice Call</title>
   <style>
     body { font-family: sans-serif; background: #111; color: #fff; text-align: center; padding: 20px; }
-    input, button { padding: 10px; margin: 5px; border-radius: 8px; border: none; font-size: 16px; }
-    button { background: #0f9d58; color: #fff; }
-    .mic-muted { background: #888; }
+    input, button { padding: 10px; margin: 8px; border-radius: 10px; border: none; font-size: 16px; width: 80%; max-width: 300px; }
+    button { background: #0f9d58; color: #fff; cursor: pointer; }
+    .disabled { background: #555; cursor: not-allowed; }
+    h2 { color: #0f9d58; }
   </style>
 </head>
 <body>
-  <h2>Voice Call</h2>
-  <input id="roomId" placeholder="Room ID" />
+  <h2>Free Voice Call</h2>
+  <input id="myId" placeholder="Your ID (for creating room)" />
+  <button id="createBtn">Create Room</button>
+  <hr style="width: 80%;" />
+  <input id="joinId" placeholder="Join Room ID" />
+  <button id="joinBtn">Join Room</button>
   <br />
-  <button id="startBtn">Start / Join</button>
-  <button id="callBtn" disabled>Call</button>
   <button id="micBtn" disabled>Mic On</button>
-  <button id="shareBtn" disabled>Share</button>
+  <button id="shareBtn" disabled>Share Room</button>
   <div id="status">Status: Not connected</div>
   <audio id="remoteAudio" autoplay></audio>
 
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
-      const roomInput = document.getElementById("roomId");
-      const startBtn = document.getElementById("startBtn");
-      const callBtn = document.getElementById("callBtn");
+      const myIdInput = document.getElementById("myId");
+      const joinIdInput = document.getElementById("joinId");
+      const createBtn = document.getElementById("createBtn");
+      const joinBtn = document.getElementById("joinBtn");
       const micBtn = document.getElementById("micBtn");
       const shareBtn = document.getElementById("shareBtn");
       const status = document.getElementById("status");
@@ -34,14 +38,25 @@
 
       let peer, localStream, currentCall;
 
-      startBtn.onclick = async () => {
-        const id = roomInput.value.trim();
-        if (!id) return alert("Enter Room ID");
+      async function getAudioStream() {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          return true;
+        } catch {
+          alert("Mic access denied");
+          return false;
+        }
+      }
+
+      createBtn.onclick = async () => {
+        const id = myIdInput.value.trim();
+        if (!id) return alert("Enter your ID to create room.");
+        const success = await getAudioStream();
+        if (!success) return;
 
         peer = new Peer(id);
         peer.on("open", () => {
-          status.innerText = "Connected as: " + id;
-          callBtn.disabled = false;
+          status.innerText = "Room Created. ID: " + id;
           micBtn.disabled = false;
           shareBtn.disabled = false;
         });
@@ -50,27 +65,28 @@
           call.answer(localStream);
           call.on("stream", stream => {
             remoteAudio.srcObject = stream;
-            status.innerText = "In call with " + call.peer;
+            status.innerText = "Connected with " + call.peer;
           });
           currentCall = call;
         });
-
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (err) {
-          alert("Microphone access failed");
-        }
       };
 
-      callBtn.onclick = () => {
-        const peerId = prompt("Enter peer ID:");
-        if (!peerId || !localStream) return;
-        const call = peer.call(peerId, localStream);
-        call.on("stream", stream => {
-          remoteAudio.srcObject = stream;
-          status.innerText = "In call with " + call.peer;
+      joinBtn.onclick = async () => {
+        const id = joinIdInput.value.trim();
+        if (!id) return alert("Enter Room ID to join.");
+        const success = await getAudioStream();
+        if (!success) return;
+
+        peer = new Peer();
+        peer.on("open", () => {
+          const call = peer.call(id, localStream);
+          call.on("stream", stream => {
+            remoteAudio.srcObject = stream;
+            status.innerText = "Connected with " + id;
+          });
+          currentCall = call;
+          micBtn.disabled = false;
         });
-        currentCall = call;
       };
 
       micBtn.onclick = () => {
@@ -80,16 +96,16 @@
       };
 
       shareBtn.onclick = () => {
-        const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(roomInput.value)}`;
+        const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(myIdInput.value.trim())}`;
         navigator.clipboard.writeText(url).then(() => alert("Link copied:\n" + url));
       };
 
-      // Auto-join if ?room= in URL
+      // Auto-join if ?room= param
       const urlParams = new URLSearchParams(location.search);
-      const roomParam = urlParams.get("room");
-      if (roomParam) {
-        roomInput.value = roomParam;
-        startBtn.click();
+      const autoRoom = urlParams.get("room");
+      if (autoRoom) {
+        joinIdInput.value = autoRoom;
+        joinBtn.click();
       }
     });
   </script>
