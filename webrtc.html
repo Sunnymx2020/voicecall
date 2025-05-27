@@ -1,131 +1,162 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8">
   <title>Voice Call App</title>
+  <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f5f5f5; margin: 0; padding: 20px; }
-    .hidden { display: none; }
-    .card { background: #fff; padding: 20px; border-radius: 10px; max-width: 400px; margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; }
-    video { width: 100%; max-height: 200px; border-radius: 10px; margin-top: 10px; }
-    .avatar { font-size: 2em; margin: 10px; background: #ddd; border-radius: 50%; width: 50px; height: 50px; line-height: 50px; display: inline-block; }
-    .status { font-size: 1.2em; margin: 10px 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    #controls, #call-controls, #status, #avatar, #roominfo {
+      margin: 10px;
+    }
+    #call-controls {
+      display: none;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
+    }
+    input {
+      padding: 10px;
+      font-size: 16px;
+      width: 250px;
+    }
+    #avatar img {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+    }
   </style>
 </head>
 <body>
-  <div class="card" id="setupUI">
-    <h2>Start a Voice Call</h2>
-    <input id="myId" type="text" placeholder="Your Room ID" />
-    <button id="createBtn">Create Room</button>
-    <input id="joinId" type="text" placeholder="Enter Room to Join" />
-    <button id="joinBtn">Join Room</button>
-    <div class="status" id="status">Initializing...</div>
+  <div id="controls">
+    <input type="text" id="roomId" placeholder="Enter Room ID or Name">
+    <br>
+    <button onclick="createRoom()">Create Room</button>
+    <button onclick="joinRoom()">Join Room</button>
+  </div>
+  <div id="status">Initializing...</div>
+  <div id="roominfo" style="display:none;"></div>
+  <div id="avatar" style="display:none;"><img src="https://api.dicebear.com/7.x/thumbs/svg?seed=User" /></div>
+  <div id="call-controls">
+    <button onclick="toggleMic()">Toggle Mic</button>
+    <button onclick="endCall()">End Call</button>
+    <button onclick="shareLink()">Share</button>
   </div>
 
-  <div class="card hidden" id="callUI">
-    <div id="roomInfo"></div>
-    <div class="avatar" id="youAvatar"></div>
-    <div class="avatar" id="peerAvatar"></div>
-    <video id="localVideo" muted autoplay playsinline></video>
-    <video id="remoteVideo" autoplay playsinline></video>
-    <div id="joinedUsers">Users: 1</div>
-    <button id="shareBtn">Share</button>
-  </div>
-
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    const createBtn = document.getElementById("createBtn");
-    const joinBtn = document.getElementById("joinBtn");
-    const myId = document.getElementById("myId");
-    const joinId = document.getElementById("joinId");
-    const setupUI = document.getElementById("setupUI");
-    const callUI = document.getElementById("callUI");
-    const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
-    const roomInfo = document.getElementById("roomInfo");
-    const youAvatar = document.getElementById("youAvatar");
-    const peerAvatar = document.getElementById("peerAvatar");
-    const status = document.getElementById("status");
-    const shareBtn = document.getElementById("shareBtn");
-    const joinedUsers = document.getElementById("joinedUsers");
-
-    let localStream;
     let peer;
-    let currentCall;
+    let call;
+    let localStream;
+    let micOn = true;
+    let room;
 
-    async function getMic() {
-      try {
+    function logStatus(text) {
+      document.getElementById("status").innerText = text;
+    }
+
+    function generateAvatar(seed) {
+      return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`;
+    }
+
+    async function initPeer(id = undefined) {
+      peer = new Peer(id);
+
+      peer.on('open', (id) => {
+        room = id;
+        document.getElementById("roominfo").innerText = `Room: ${room}`;
+        document.getElementById("roominfo").style.display = "block";
+        document.getElementById("controls").style.display = "none";
+        document.getElementById("call-controls").style.display = "block";
+        document.getElementById("avatar").style.display = "block";
+        document.querySelector("#avatar img").src = generateAvatar(id);
+        logStatus("Waiting for user to join...");
+      });
+
+      peer.on('call', async (incomingCall) => {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        localVideo.srcObject = localStream;
-        return true;
-      } catch (e) {
-        alert("Mic access required!");
-        return false;
+        incomingCall.answer(localStream);
+        handleCall(incomingCall);
+      });
+    }
+
+    function handleCall(activeCall) {
+      call = activeCall;
+      call.on('stream', (remoteStream) => {
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.play();
+        logStatus("Connected");
+      });
+    }
+
+    async function createRoom() {
+      const roomId = document.getElementById("roomId").value.trim();
+      await initPeer(roomId || undefined);
+    }
+
+    async function joinRoom() {
+      const roomId = document.getElementById("roomId").value.trim();
+      if (!roomId) {
+        alert("Please enter a Room ID to join");
+        return;
+      }
+
+      peer = new Peer();
+
+      peer.on('open', async (id) => {
+        room = roomId;
+        document.getElementById("roominfo").innerText = `Connected to: ${room}`;
+        document.getElementById("roominfo").style.display = "block";
+        document.getElementById("controls").style.display = "none";
+        document.getElementById("call-controls").style.display = "block";
+        document.getElementById("avatar").style.display = "block";
+        document.querySelector("#avatar img").src = generateAvatar(id);
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        call = peer.call(room, localStream);
+        handleCall(call);
+      });
+    }
+
+    function toggleMic() {
+      if (localStream) {
+        localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
+        micOn = !micOn;
+        logStatus(micOn ? "Mic On" : "Mic Muted");
       }
     }
 
-    createBtn.onclick = async () => {
-      if (!myId.value) return alert("Enter a Room ID to Create");
-      if (!await getMic()) return;
+    function endCall() {
+      if (call) call.close();
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      logStatus("Call Ended");
+      document.getElementById("call-controls").style.display = "none";
+    }
 
-      peer = new Peer(myId.value);
-
-      peer.on("open", () => {
-        setupUI.classList.add("hidden");
-        callUI.classList.remove("hidden");
-        status.innerText = "Room Created. Waiting for call...";
-        roomInfo.innerText = "Room ID: " + myId.value;
-        youAvatar.textContent = myId.value.slice(0, 2).toUpperCase();
+    function shareLink() {
+      const shareURL = `${window.location.origin + window.location.pathname}?room=${room}`;
+      navigator.clipboard.writeText(shareURL).then(() => {
+        alert("Share link copied to clipboard:\n" + shareURL);
       });
+    }
 
-      peer.on("call", call => {
-        currentCall = call;
-        call.answer(localStream);
-        call.on("stream", stream => remoteVideo.srcObject = stream);
-        status.innerText = "Call Connected";
-        peerAvatar.textContent = call.peer.slice(0, 2).toUpperCase();
-        joinedUsers.innerText = "Users: 2";
-      });
-
-      peer.on("error", e => alert("Error: " + e));
-    };
-
-    joinBtn.onclick = async () => {
-      if (!joinId.value) return alert("Enter Room ID to Join");
-      if (!await getMic()) return;
-
-      peer = new Peer();
-      peer.on("open", () => {
-        const call = peer.call(joinId.value, localStream);
-        currentCall = call;
-        call.on("stream", stream => remoteVideo.srcObject = stream);
-
-        setupUI.classList.add("hidden");
-        callUI.classList.remove("hidden");
-        status.innerText = "Connected to Room";
-        roomInfo.innerText = "Room ID: " + joinId.value;
-        youAvatar.textContent = peer.id.slice(0, 2).toUpperCase();
-        peerAvatar.textContent = joinId.value.slice(0, 2).toUpperCase();
-        joinedUsers.innerText = "Users: 2";
-      });
-
-      peer.on("error", e => alert("Error: " + e));
-    };
-
-    shareBtn.onclick = () => {
-      const id = myId.value || joinId.value || "";
-      if (!id) return alert("No room to share");
-      const url = location.origin + location.pathname + "?room=" + id;
-      navigator.share ? navigator.share({ title: "Join My Call", url }) : prompt("Copy link:", url);
-    };
-
-    // Auto join if ?room= present
-    const urlRoom = new URLSearchParams(location.search).get("room");
-    if (urlRoom) {
-      joinId.value = urlRoom;
-      joinBtn.click();
+    // Auto-join if room ID is in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("room")) {
+      document.getElementById("roomId").value = urlParams.get("room");
+      joinRoom();
+    } else {
+      logStatus("Ready");
     }
   </script>
 </body>
