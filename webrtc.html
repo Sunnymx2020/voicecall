@@ -2,102 +2,108 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Voice Call</title>
+  <title>Voice Call Room</title>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-    #status { margin-top: 20px; font-weight: bold; }
-    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    body { font-family: sans-serif; text-align: center; margin-top: 40px; }
+    input, button { font-size: 16px; padding: 8px; margin: 8px; }
+    #status { font-weight: bold; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h2>Voice Call</h2>
-  <div id="status">Initializing...</div>
+  <h2>WebRTC Voice Call</h2>
+
+  <input type="text" id="roomId" placeholder="Enter Room ID" />
+  <button onclick="generateId()">Generate</button>
+  <br>
+  <button id="startBtn">Start</button>
   <button id="callBtn" disabled>Call</button>
-  <button id="endBtn" disabled>End Call</button>
+  <button id="micBtn" disabled>Mic On</button>
+  <button id="endBtn" disabled>End</button>
+
+  <div id="status">Status: Waiting</div>
+  <div id="users">Users in room: 1</div>
 
   <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const myID = urlParams.get('caller');
-    const targetID = urlParams.get('receiver');
+    let localStream, currentCall, peer;
+    let micEnabled = true;
+    let peerId = '';
 
-    const statusEl = document.getElementById('status');
-    const callBtn = document.getElementById('callBtn');
-    const endBtn = document.getElementById('endBtn');
+    function generateId() {
+      const randomId = 'room' + Math.floor(Math.random() * 10000);
+      document.getElementById('roomId').value = randomId;
+    }
 
-    let localStream;
-    let currentCall;
+    document.getElementById('startBtn').onclick = function () {
+      peerId = document.getElementById('roomId').value.trim();
+      if (!peerId) return alert("Enter a Room ID");
 
-    const peer = new Peer(myID, {
-      host: 'peerjs.com',
-      secure: true,
-      port: 443
-    });
+      peer = new Peer(peerId, {
+        host: 'peerjs.com',
+        secure: true,
+        port: 443
+      });
 
-    peer.on('open', () => {
-      statusEl.textContent = `Your ID: ${myID}`;
-      callBtn.disabled = false;
-    });
+      updateStatus("Connecting...");
 
-    peer.on('call', (call) => {
-      statusEl.textContent = `Incoming call from ${call.peer}`;
-      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-        .then((stream) => {
+      peer.on('open', () => {
+        updateStatus(`Connected as ${peerId}`);
+        document.getElementById('callBtn').disabled = false;
+        document.getElementById('micBtn').disabled = false;
+      });
+
+      peer.on('call', (call) => {
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
           localStream = stream;
           call.answer(stream);
           currentCall = call;
-          setupCallEventHandlers(call);
-        })
-        .catch((err) => {
-          console.error('Failed to get local stream', err);
+          handleCallStream(call);
         });
-    });
+      });
+    };
 
-    callBtn.addEventListener('click', () => {
-      if (!targetID) {
-        alert('Receiver ID not specified in URL.');
-        return;
-      }
-      statusEl.textContent = `Calling ${targetID}...`;
-      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-        .then((stream) => {
-          localStream = stream;
-          const call = peer.call(targetID, stream);
-          currentCall = call;
-          setupCallEventHandlers(call);
-        })
-        .catch((err) => {
-          console.error('Failed to get local stream', err);
-        });
-    });
+    document.getElementById('callBtn').onclick = function () {
+      const remoteId = prompt("Enter Receiver ID:");
+      if (!remoteId) return;
 
-    endBtn.addEventListener('click', () => {
-      if (currentCall) {
-        currentCall.close();
-        statusEl.textContent = 'Call ended.';
-        endBtn.disabled = true;
-      }
-    });
+      updateStatus("Calling...");
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
+        localStream = stream;
+        const call = peer.call(remoteId, stream);
+        currentCall = call;
+        handleCallStream(call);
+      });
+    };
 
-    function setupCallEventHandlers(call) {
+    document.getElementById('endBtn').onclick = function () {
+      if (currentCall) currentCall.close();
+      updateStatus("Call ended.");
+    };
+
+    document.getElementById('micBtn').onclick = function () {
+      if (!localStream) return;
+      micEnabled = !micEnabled;
+      localStream.getAudioTracks()[0].enabled = micEnabled;
+      document.getElementById('micBtn').innerText = micEnabled ? "Mic On" : "Mic Off";
+    };
+
+    function handleCallStream(call) {
       call.on('stream', (remoteStream) => {
         const audio = new Audio();
         audio.srcObject = remoteStream;
         audio.play();
-        statusEl.textContent = `In call with ${call.peer}`;
-        endBtn.disabled = false;
+        updateStatus(`In call with ${call.peer}`);
+        document.getElementById('endBtn').disabled = false;
       });
 
       call.on('close', () => {
-        statusEl.textContent = 'Call ended.';
-        endBtn.disabled = true;
+        updateStatus("Peer ended call.");
+        document.getElementById('endBtn').disabled = true;
       });
+    }
 
-      call.on('error', (err) => {
-        console.error('Call error:', err);
-        statusEl.textContent = 'Call error.';
-        endBtn.disabled = true;
-      });
+    function updateStatus(msg) {
+      document.getElementById('status').innerText = "Status: " + msg;
     }
   </script>
 </body>
