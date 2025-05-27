@@ -4,56 +4,15 @@
   <meta charset="UTF-8" />
   <title>Voice Call</title>
   <style>
-    body {
-      font-family: sans-serif;
-      background: #0b0b0b;
-      color: #fff;
-      text-align: center;
-      padding: 20px;
-    }
-    input, button {
-      padding: 10px;
-      margin: 8px;
-      border-radius: 8px;
-      font-size: 16px;
-      border: none;
-      width: 80%;
-      max-width: 300px;
-    }
-    button {
-      background: #0f9d58;
-      color: #fff;
-      cursor: pointer;
-    }
+    body { font-family: sans-serif; background: #0b0b0b; color: #fff; text-align: center; padding: 20px; }
+    input, button { padding: 10px; margin: 8px; border-radius: 8px; font-size: 16px; border: none; width: 80%; max-width: 300px; }
+    button { background: #0f9d58; color: #fff; cursor: pointer; }
     .hidden { display: none; }
     .info, h2 { margin-top: 10px; }
-    .ringing {
-      background: #111;
-      padding: 20px;
-      border-radius: 15px;
-      margin-top: 20px;
-    }
-    .timer {
-      font-size: 18px;
-      margin-top: 5px;
-    }
-    .avatars {
-      display: flex;
-      justify-content: center;
-      margin: 20px 0;
-    }
-    .avatars img {
-      width: 80px;
-      height: 80px;
-      margin: 0 20px;
-      border-radius: 50%;
-      border: 2px solid #333;
-    }
-    #usersCount {
-      margin-top: 10px;
-      font-weight: bold;
-      font-size: 16px;
-    }
+    .ringing { background: #111; padding: 20px; border-radius: 15px; margin-top: 20px; }
+    .timer { font-size: 18px; margin-top: 5px; }
+    .avatars { display: flex; justify-content: center; gap: 30px; margin: 10px 0; }
+    .avatar { width: 70px; height: 70px; background: #444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; color: white; }
   </style>
 </head>
 <body>
@@ -82,13 +41,13 @@
 <!-- Call UI -->
 <div id="callUI" class="hidden">
   <div class="avatars">
-    <img src="https://i.imgur.com/8Km9tLL.png" id="avatar1" />
-    <img src="https://i.imgur.com/ebHfuth.png" id="avatar2" />
+    <div id="youAvatar" class="avatar">U</div>
+    <div id="peerAvatar" class="avatar">P</div>
   </div>
   <div class="info" id="roomInfo"></div>
   <div class="info" id="status">Connecting...</div>
+  <div class="info" id="users">Joined Users: 1</div>
   <div class="timer" id="callTimer">00:00</div>
-  <div id="usersCount">1/2 users connected</div>
   <button id="micBtn">Mic On</button>
   <button id="disconnectBtn">Disconnect</button>
 </div>
@@ -97,7 +56,8 @@
 
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script>
-let peer, localStream, currentCall, timerInterval, seconds = 0, userCount = 1;
+let peer, localStream, currentCall, timerInterval, seconds = 0;
+let userCount = 1;
 
 const createBtn = document.getElementById("createBtn");
 const joinBtn = document.getElementById("joinBtn");
@@ -114,11 +74,15 @@ const callUI = document.getElementById("callUI");
 
 const roomInfo = document.getElementById("roomInfo");
 const status = document.getElementById("status");
+const users = document.getElementById("users");
 const callTimer = document.getElementById("callTimer");
+
+const youAvatar = document.getElementById("youAvatar");
+const peerAvatar = document.getElementById("peerAvatar");
+
 const micBtn = document.getElementById("micBtn");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const remoteAudio = document.getElementById("remoteAudio");
-const usersCount = document.getElementById("usersCount");
 
 function startTimer() {
   seconds = 0;
@@ -145,6 +109,11 @@ async function getMic() {
   }
 }
 
+function setAvatars(myId, peerId) {
+  youAvatar.textContent = myId.slice(0, 2).toUpperCase();
+  peerAvatar.textContent = peerId ? peerId.slice(0, 2).toUpperCase() : "--";
+}
+
 createBtn.onclick = async () => {
   const id = myIdInput.value.trim();
   if (!id) return alert("Enter your ID to create room.");
@@ -154,6 +123,8 @@ createBtn.onclick = async () => {
   peer.on("open", () => {
     setupUI.classList.add("hidden");
     status.innerText = "Room Created. Waiting for call...";
+    roomInfo.innerText = "Room ID: " + id;
+    youAvatar.textContent = id.slice(0, 2).toUpperCase();
   });
 
   peer.on("call", call => {
@@ -161,21 +132,18 @@ createBtn.onclick = async () => {
     ringingUI.classList.remove("hidden");
 
     acceptBtn.onclick = () => {
-      ringtone.pause();
-      ringtone.currentTime = 0;
+      ringtone.pause(); ringtone.currentTime = 0;
       ringingUI.classList.add("hidden");
 
       call.answer(localStream);
       call.on("stream", stream => {
-        connected(stream, id);
+        connected(stream, id, call.peer);
       });
-
       currentCall = call;
     };
 
     rejectBtn.onclick = () => {
-      ringtone.pause();
-      ringtone.currentTime = 0;
+      ringtone.pause(); ringtone.currentTime = 0;
       ringingUI.classList.add("hidden");
       call.close();
       status.innerText = "Call rejected.";
@@ -192,13 +160,13 @@ joinBtn.onclick = async () => {
   peer.on("open", () => {
     const call = peer.call(id, localStream);
     call.on("stream", stream => {
-      connected(stream, id);
+      connected(stream, id, peer.id);
     });
     currentCall = call;
   });
 };
 
-function connected(stream, id) {
+function connected(stream, id, peerId) {
   setupUI.classList.add("hidden");
   ringingUI.classList.add("hidden");
   callUI.classList.remove("hidden");
@@ -206,7 +174,8 @@ function connected(stream, id) {
   roomInfo.innerText = "Room ID: " + id;
   status.innerText = "Connected";
   userCount = 2;
-  usersCount.innerText = userCount + "/2 users connected";
+  users.innerText = "Joined Users: " + userCount;
+  setAvatars(id, peerId);
   startTimer();
 }
 
@@ -220,6 +189,7 @@ disconnectBtn.onclick = () => {
   if (currentCall) currentCall.close();
   stopTimer();
   status.innerText = "Call Ended.";
+  users.innerText = "Joined Users: 1";
   callUI.classList.add("hidden");
 };
 
