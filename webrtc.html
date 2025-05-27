@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Voice Call App</title>
+<title>Voice Call App with Share</title>
 <style>
   body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -52,15 +52,15 @@
     background: #444;
     cursor: not-allowed;
   }
-  #status {
-    margin: 15px 0;
-    font-weight: 600;
-  }
   .mic-btn {
     background: #db4437;
   }
   .mic-btn.muted {
     background: #757575;
+  }
+  #status {
+    margin: 15px 0;
+    font-weight: 600;
   }
   #userCount {
     margin-top: 12px;
@@ -80,11 +80,11 @@
   <button id="startBtn">Start / Join</button>
   <button id="callBtn" disabled>Call</button>
   <button id="micBtn" disabled class="mic-btn">Mic On</button>
+  <button id="shareBtn" disabled style="background:#3b5998;">Share Link</button>
   <div id="status">Status: Not connected</div>
   <div id="userCount">Users joined: 0</div>
 </div>
 
-<!-- Audio elements for local and remote audio -->
 <audio id="localAudio" autoplay muted></audio>
 <audio id="remoteAudio" autoplay></audio>
 
@@ -93,6 +93,7 @@
   const startBtn = document.getElementById('startBtn');
   const callBtn = document.getElementById('callBtn');
   const micBtn = document.getElementById('micBtn');
+  const shareBtn = document.getElementById('shareBtn');
   const roomIdInput = document.getElementById('roomId');
   const statusText = document.getElementById('status');
   const userCountText = document.getElementById('userCount');
@@ -103,7 +104,7 @@
   let localStream;
   let currentCall;
   let micMuted = false;
-  let connectedUsers = 1; // yourself counts as 1
+  let connectedUsers = 1;
 
   function updateStatus(msg) {
     statusText.innerText = 'Status: ' + msg;
@@ -120,10 +121,31 @@
       localAudio.srcObject = stream;
       updateStatus('Microphone access granted');
       micBtn.disabled = false;
+      shareBtn.disabled = false;
     } catch (err) {
       updateStatus('Microphone access denied');
       micBtn.disabled = true;
+      shareBtn.disabled = true;
     }
+  }
+
+  function getRoomIdFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('room');
+  }
+
+  function shareRoomLink() {
+    const roomId = roomIdInput.value.trim();
+    if (!roomId) {
+      alert('Enter a Room ID first!');
+      return;
+    }
+    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(roomId)}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      alert('Link copied to clipboard:\n' + shareUrl);
+    }).catch(() => {
+      alert('Failed to copy link. Here it is:\n' + shareUrl);
+    });
   }
 
   startBtn.onclick = async () => {
@@ -149,6 +171,7 @@
       updateStatus('Error: ' + err.message);
       startBtn.disabled = false;
       callBtn.disabled = true;
+      shareBtn.disabled = true;
     });
 
     peer.on('call', (call) => {
@@ -181,11 +204,14 @@
     micBtn.classList.toggle('muted', micMuted);
   };
 
+  shareBtn.onclick = () => {
+    shareRoomLink();
+  };
+
   function setupCallEvents(call) {
     call.on('stream', (remoteStream) => {
       remoteAudio.srcObject = remoteStream;
       updateStatus('In call with ' + call.peer);
-      // Here you can increase user count if you implement signaling
       connectedUsers = 2;
       updateUserCount(connectedUsers);
     });
@@ -198,6 +224,15 @@
       updateStatus('Call error: ' + err.message);
     });
   }
+
+  // Auto fill Room ID from URL param and auto connect
+  window.onload = () => {
+    const room = getRoomIdFromURL();
+    if (room) {
+      roomIdInput.value = room;
+      startBtn.click();
+    }
+  };
 </script>
 
 </body>
