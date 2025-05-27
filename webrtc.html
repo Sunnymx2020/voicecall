@@ -2,48 +2,77 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Voice Call</title>
+  <title>Voice Call App</title>
   <style>
-    body { font-family: sans-serif; background: #111; color: #fff; text-align: center; padding: 20px; }
-    input, button { padding: 10px; margin: 8px; border-radius: 10px; border: none; font-size: 16px; width: 80%; max-width: 300px; }
+    body { font-family: sans-serif; background: #0e0e0e; color: #fff; text-align: center; padding: 20px; }
+    input, button { padding: 10px; margin: 8px; border-radius: 8px; border: none; font-size: 16px; width: 80%; max-width: 300px; }
     button { background: #0f9d58; color: #fff; cursor: pointer; }
     .disabled { background: #555; cursor: not-allowed; }
     h2 { color: #0f9d58; }
+    .profile { margin: 10px auto; width: 100px; height: 100px; border-radius: 50%; background: #333; font-size: 50px; display: flex; align-items: center; justify-content: center; }
+    .info { margin: 10px 0; }
   </style>
 </head>
 <body>
   <h2>Free Voice Call</h2>
-  <input id="myId" placeholder="Your ID (for creating room)" />
+  <div class="profile">🗣️</div>
+
+  <div id="callTimer" class="info">Call Time: 00:00</div>
+  <div class="info" id="status">Status: Not connected</div>
+
+  <input id="myId" placeholder="Your ID (create room)" />
   <button id="createBtn">Create Room</button>
+
   <hr style="width: 80%;" />
+
   <input id="joinId" placeholder="Join Room ID" />
   <button id="joinBtn">Join Room</button>
-  <br />
+
   <button id="micBtn" disabled>Mic On</button>
+  <button id="disconnectBtn" disabled>Disconnect</button>
   <button id="shareBtn" disabled>Share Room</button>
-  <div id="status">Status: Not connected</div>
+
+  <div id="roomDisplay" class="info"></div>
   <audio id="remoteAudio" autoplay></audio>
 
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script>
-    document.addEventListener("DOMContentLoaded", function () {
+    document.addEventListener("DOMContentLoaded", () => {
       const myIdInput = document.getElementById("myId");
       const joinIdInput = document.getElementById("joinId");
       const createBtn = document.getElementById("createBtn");
       const joinBtn = document.getElementById("joinBtn");
       const micBtn = document.getElementById("micBtn");
+      const disconnectBtn = document.getElementById("disconnectBtn");
       const shareBtn = document.getElementById("shareBtn");
       const status = document.getElementById("status");
       const remoteAudio = document.getElementById("remoteAudio");
+      const roomDisplay = document.getElementById("roomDisplay");
+      const callTimer = document.getElementById("callTimer");
 
-      let peer, localStream, currentCall;
+      let peer, localStream, currentCall, timerInterval, seconds = 0;
+
+      function startTimer() {
+        seconds = 0;
+        timerInterval = setInterval(() => {
+          seconds++;
+          const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+          const s = String(seconds % 60).padStart(2, '0');
+          callTimer.innerText = `Call Time: ${m}:${s}`;
+        }, 1000);
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+        callTimer.innerText = "Call Time: 00:00";
+      }
 
       async function getAudioStream() {
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           return true;
         } catch {
-          alert("Mic access denied");
+          alert("Mic permission denied.");
           return false;
         }
       }
@@ -51,12 +80,13 @@
       createBtn.onclick = async () => {
         const id = myIdInput.value.trim();
         if (!id) return alert("Enter your ID to create room.");
-        const success = await getAudioStream();
-        if (!success) return;
+        const ok = await getAudioStream();
+        if (!ok) return;
 
         peer = new Peer(id);
         peer.on("open", () => {
-          status.innerText = "Room Created. ID: " + id;
+          status.innerText = "Room Created! ID: " + id;
+          roomDisplay.innerText = "Room ID: " + id;
           micBtn.disabled = false;
           shareBtn.disabled = false;
         });
@@ -65,27 +95,32 @@
           call.answer(localStream);
           call.on("stream", stream => {
             remoteAudio.srcObject = stream;
-            status.innerText = "Connected with " + call.peer;
+            status.innerText = "Connected!";
+            startTimer();
           });
           currentCall = call;
+          disconnectBtn.disabled = false;
         });
       };
 
       joinBtn.onclick = async () => {
         const id = joinIdInput.value.trim();
         if (!id) return alert("Enter Room ID to join.");
-        const success = await getAudioStream();
-        if (!success) return;
+        const ok = await getAudioStream();
+        if (!ok) return;
 
         peer = new Peer();
         peer.on("open", () => {
           const call = peer.call(id, localStream);
           call.on("stream", stream => {
             remoteAudio.srcObject = stream;
-            status.innerText = "Connected with " + id;
+            status.innerText = "Connected to " + id;
+            roomDisplay.innerText = "Room ID: " + id;
+            startTimer();
           });
           currentCall = call;
           micBtn.disabled = false;
+          disconnectBtn.disabled = false;
         });
       };
 
@@ -95,12 +130,25 @@
         micBtn.innerText = track.enabled ? "Mic On" : "Mic Off";
       };
 
-      shareBtn.onclick = () => {
-        const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(myIdInput.value.trim())}`;
-        navigator.clipboard.writeText(url).then(() => alert("Link copied:\n" + url));
+      disconnectBtn.onclick = () => {
+        if (currentCall) {
+          currentCall.close();
+          remoteAudio.srcObject = null;
+          status.innerText = "Disconnected.";
+          stopTimer();
+        }
+        micBtn.disabled = true;
+        disconnectBtn.disabled = true;
       };
 
-      // Auto-join if ?room= param
+      shareBtn.onclick = () => {
+        const id = myIdInput.value.trim();
+        const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(id)}`;
+        navigator.clipboard.writeText(url).then(() => {
+          alert("Room link copied:\n" + url);
+        });
+      };
+
       const urlParams = new URLSearchParams(location.search);
       const autoRoom = urlParams.get("room");
       if (autoRoom) {
