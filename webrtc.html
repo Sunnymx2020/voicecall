@@ -4,13 +4,56 @@
   <meta charset="UTF-8" />
   <title>Voice Call</title>
   <style>
-    body { font-family: sans-serif; background: #0b0b0b; color: #fff; text-align: center; padding: 20px; }
-    input, button { padding: 10px; margin: 8px; border-radius: 8px; font-size: 16px; border: none; width: 80%; max-width: 300px; }
-    button { background: #0f9d58; color: #fff; cursor: pointer; }
+    body {
+      font-family: sans-serif;
+      background: #0b0b0b;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 8px;
+      border-radius: 8px;
+      font-size: 16px;
+      border: none;
+      width: 80%;
+      max-width: 300px;
+    }
+    button {
+      background: #0f9d58;
+      color: #fff;
+      cursor: pointer;
+    }
     .hidden { display: none; }
     .info, h2 { margin-top: 10px; }
-    .ringing { background: #111; padding: 20px; border-radius: 15px; margin-top: 20px; }
-    .timer { font-size: 18px; margin-top: 5px; }
+    .ringing {
+      background: #111;
+      padding: 20px;
+      border-radius: 15px;
+      margin-top: 20px;
+    }
+    .timer {
+      font-size: 18px;
+      margin-top: 5px;
+    }
+    .avatars {
+      display: flex;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .avatars img {
+      width: 80px;
+      height: 80px;
+      margin: 0 20px;
+      border-radius: 50%;
+      border: 2px solid #333;
+    }
+    #usersCount {
+      margin-top: 10px;
+      font-weight: bold;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
@@ -38,9 +81,14 @@
 
 <!-- Call UI -->
 <div id="callUI" class="hidden">
+  <div class="avatars">
+    <img src="https://i.imgur.com/8Km9tLL.png" id="avatar1" />
+    <img src="https://i.imgur.com/ebHfuth.png" id="avatar2" />
+  </div>
   <div class="info" id="roomInfo"></div>
   <div class="info" id="status">Connecting...</div>
   <div class="timer" id="callTimer">00:00</div>
+  <div id="usersCount">1/2 users connected</div>
   <button id="micBtn">Mic On</button>
   <button id="disconnectBtn">Disconnect</button>
 </div>
@@ -49,7 +97,7 @@
 
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script>
-let peer, localStream, currentCall, timerInterval, seconds = 0;
+let peer, localStream, currentCall, timerInterval, seconds = 0, userCount = 1;
 
 const createBtn = document.getElementById("createBtn");
 const joinBtn = document.getElementById("joinBtn");
@@ -70,6 +118,7 @@ const callTimer = document.getElementById("callTimer");
 const micBtn = document.getElementById("micBtn");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const remoteAudio = document.getElementById("remoteAudio");
+const usersCount = document.getElementById("usersCount");
 
 function startTimer() {
   seconds = 0;
@@ -156,6 +205,8 @@ function connected(stream, id) {
   remoteAudio.srcObject = stream;
   roomInfo.innerText = "Room ID: " + id;
   status.innerText = "Connected";
+  userCount = 2;
+  usersCount.innerText = userCount + "/2 users connected";
   startTimer();
 }
 
