@@ -1,38 +1,104 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>Voice Call</title>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+    #status { margin-top: 20px; font-weight: bold; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+  </style>
 </head>
 <body>
   <h2>Voice Call</h2>
-  <button onclick="call()">Call</button>
+  <div id="status">Initializing...</div>
+  <button id="callBtn" disabled>Call</button>
+  <button id="endBtn" disabled>End Call</button>
+
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const myID = urlParams.get('caller');
     const targetID = urlParams.get('receiver');
 
-    const peer = new Peer(myID);
+    const statusEl = document.getElementById('status');
+    const callBtn = document.getElementById('callBtn');
+    const endBtn = document.getElementById('endBtn');
 
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
-      peer.on('call', (call) => {
-        call.answer(stream);
-        call.on('stream', (remoteStream) => {
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play();
+    let localStream;
+    let currentCall;
+
+    const peer = new Peer(myID, {
+      host: 'peerjs.com',
+      secure: true,
+      port: 443
+    });
+
+    peer.on('open', () => {
+      statusEl.textContent = `Your ID: ${myID}`;
+      callBtn.disabled = false;
+    });
+
+    peer.on('call', (call) => {
+      statusEl.textContent = `Incoming call from ${call.peer}`;
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then((stream) => {
+          localStream = stream;
+          call.answer(stream);
+          currentCall = call;
+          setupCallEventHandlers(call);
+        })
+        .catch((err) => {
+          console.error('Failed to get local stream', err);
         });
+    });
+
+    callBtn.addEventListener('click', () => {
+      if (!targetID) {
+        alert('Receiver ID not specified in URL.');
+        return;
+      }
+      statusEl.textContent = `Calling ${targetID}...`;
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then((stream) => {
+          localStream = stream;
+          const call = peer.call(targetID, stream);
+          currentCall = call;
+          setupCallEventHandlers(call);
+        })
+        .catch((err) => {
+          console.error('Failed to get local stream', err);
+        });
+    });
+
+    endBtn.addEventListener('click', () => {
+      if (currentCall) {
+        currentCall.close();
+        statusEl.textContent = 'Call ended.';
+        endBtn.disabled = true;
+      }
+    });
+
+    function setupCallEventHandlers(call) {
+      call.on('stream', (remoteStream) => {
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.play();
+        statusEl.textContent = `In call with ${call.peer}`;
+        endBtn.disabled = false;
       });
 
-      window.call = () => {
-        const call = peer.call(targetID, stream);
-        call.on('stream', (remoteStream) => {
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-          audio.play();
-        });
-      };
-    });
+      call.on('close', () => {
+        statusEl.textContent = 'Call ended.';
+        endBtn.disabled = true;
+      });
+
+      call.on('error', (err) => {
+        console.error('Call error:', err);
+        statusEl.textContent = 'Call error.';
+        endBtn.disabled = true;
+      });
+    }
   </script>
 </body>
 </html>
