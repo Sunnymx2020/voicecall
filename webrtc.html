@@ -31,6 +31,7 @@
     border: none;
     margin-bottom: 15px;
     font-size: 1.1rem;
+    box-sizing: border-box;
   }
   button {
     width: 100%;
@@ -42,8 +43,9 @@
     color: white;
     cursor: pointer;
     transition: background 0.3s ease;
+    margin-bottom: 10px;
   }
-  button:hover {
+  button:hover:not(:disabled) {
     background: #0c7a41;
   }
   button:disabled {
@@ -55,7 +57,6 @@
     font-weight: 600;
   }
   .mic-btn {
-    margin-top: 10px;
     background: #db4437;
   }
   .mic-btn.muted {
@@ -65,6 +66,9 @@
     margin-top: 12px;
     font-size: 0.9rem;
     color: #bbb;
+  }
+  audio {
+    display: none;
   }
 </style>
 </head>
@@ -80,17 +84,120 @@
   <div id="userCount">Users joined: 0</div>
 </div>
 
+<!-- Audio elements for local and remote audio -->
+<audio id="localAudio" autoplay muted></audio>
+<audio id="remoteAudio" autoplay></audio>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script>
-  // Your WebRTC & PeerJS code here...
-
-  // Just UI behavior example:
-
+  const startBtn = document.getElementById('startBtn');
+  const callBtn = document.getElementById('callBtn');
   const micBtn = document.getElementById('micBtn');
-  micBtn.onclick = () => {
-    micBtn.classList.toggle('muted');
-    micBtn.innerText = micBtn.classList.contains('muted') ? 'Mic Off' : 'Mic On';
-    // Add your mic mute/unmute code here
+  const roomIdInput = document.getElementById('roomId');
+  const statusText = document.getElementById('status');
+  const userCountText = document.getElementById('userCount');
+  const localAudio = document.getElementById('localAudio');
+  const remoteAudio = document.getElementById('remoteAudio');
+
+  let peer;
+  let localStream;
+  let currentCall;
+  let micMuted = false;
+  let connectedUsers = 1; // yourself counts as 1
+
+  function updateStatus(msg) {
+    statusText.innerText = 'Status: ' + msg;
+  }
+
+  function updateUserCount(count) {
+    userCountText.innerText = 'Users joined: ' + count;
+  }
+
+  async function getMedia() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream = stream;
+      localAudio.srcObject = stream;
+      updateStatus('Microphone access granted');
+      micBtn.disabled = false;
+    } catch (err) {
+      updateStatus('Microphone access denied');
+      micBtn.disabled = true;
+    }
+  }
+
+  startBtn.onclick = async () => {
+    const peerId = roomIdInput.value.trim();
+    if (!peerId) {
+      alert('Enter a Room ID');
+      return;
+    }
+
+    startBtn.disabled = true;
+    updateStatus('Connecting...');
+    
+    peer = new Peer(peerId);
+
+    peer.on('open', () => {
+      updateStatus(`Connected as ${peerId}`);
+      callBtn.disabled = false;
+      getMedia();
+      updateUserCount(connectedUsers);
+    });
+
+    peer.on('error', (err) => {
+      updateStatus('Error: ' + err.message);
+      startBtn.disabled = false;
+      callBtn.disabled = true;
+    });
+
+    peer.on('call', (call) => {
+      currentCall = call;
+      call.answer(localStream);
+      setupCallEvents(call);
+      updateStatus('Call answered');
+    });
   };
+
+  callBtn.onclick = () => {
+    if (!peer || !localStream) {
+      alert('Not connected or microphone not ready');
+      return;
+    }
+
+    const targetId = prompt('Enter Peer ID to call:');
+    if (!targetId) return;
+
+    updateStatus('Calling ' + targetId + '...');
+    currentCall = peer.call(targetId, localStream);
+    setupCallEvents(currentCall);
+  };
+
+  micBtn.onclick = () => {
+    if (!localStream) return;
+    micMuted = !micMuted;
+    localStream.getAudioTracks()[0].enabled = !micMuted;
+    micBtn.innerText = micMuted ? 'Mic Off' : 'Mic On';
+    micBtn.classList.toggle('muted', micMuted);
+  };
+
+  function setupCallEvents(call) {
+    call.on('stream', (remoteStream) => {
+      remoteAudio.srcObject = remoteStream;
+      updateStatus('In call with ' + call.peer);
+      // Here you can increase user count if you implement signaling
+      connectedUsers = 2;
+      updateUserCount(connectedUsers);
+    });
+    call.on('close', () => {
+      updateStatus('Call ended');
+      connectedUsers = 1;
+      updateUserCount(connectedUsers);
+    });
+    call.on('error', (err) => {
+      updateStatus('Call error: ' + err.message);
+    });
+  }
 </script>
 
 </body>
