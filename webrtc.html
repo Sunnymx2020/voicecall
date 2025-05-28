@@ -82,11 +82,34 @@
       display: none;
     }
 
-    video {
+    #video-container {
+      position: relative;
       width: 100%;
-      max-width: 300px;
-      border-radius: 8px;
-      margin-top: 10px;
+      max-width: 400px;
+      height: 600px;
+      background-color: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 20px;
+    }
+
+    #localVideo, #remoteVideo {
+      position: absolute;
+      border-radius: 12px;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    #localVideo {
+      width: 120px;
+      height: 160px;
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 2;
+      border: 2px solid white;
+      box-shadow: 0 0 10px rgba(255,255,255,0.2);
     }
 
     @media screen and (max-width: 480px) {
@@ -104,8 +127,13 @@
         height: 60px;
       }
 
-      video {
-        max-width: 100%;
+      #video-container {
+        height: 400px;
+      }
+
+      #localVideo {
+        width: 100px;
+        height: 130px;
       }
     }
   </style>
@@ -123,15 +151,16 @@
     <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=User" />
   </div>
 
+  <div id="video-container" style="display: none;">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+
   <div id="call-controls">
     <button onclick="toggleMic()">Toggle Mic</button>
     <button onclick="endCall()">End Call</button>
     <button onclick="shareLink()">Share</button>
   </div>
-
-  <!-- Optionally add video tag (if needed in future) -->
-  <!-- <video id="localVideo" autoplay muted playsinline></video>
-  <video id="remoteVideo" autoplay playsinline></video> -->
 
   <script>
     let peer;
@@ -158,12 +187,14 @@
         document.getElementById("controls").style.display = "none";
         document.getElementById("call-controls").style.display = "block";
         document.getElementById("avatar").style.display = "block";
+        document.getElementById("video-container").style.display = "block";
         document.querySelector("#avatar img").src = generateAvatar(id);
         logStatus("Waiting for user to join...");
       });
 
       peer.on('call', async (incomingCall) => {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        document.getElementById('localVideo').srcObject = localStream;
         incomingCall.answer(localStream);
         handleCall(incomingCall);
       });
@@ -172,9 +203,7 @@
     function handleCall(activeCall) {
       call = activeCall;
       call.on('stream', (remoteStream) => {
-        const audio = new Audio();
-        audio.srcObject = remoteStream;
-        audio.play();
+        document.getElementById('remoteVideo').srcObject = remoteStream;
         logStatus("Connected");
       });
     }
@@ -200,8 +229,12 @@
         document.getElementById("controls").style.display = "none";
         document.getElementById("call-controls").style.display = "block";
         document.getElementById("avatar").style.display = "block";
+        document.getElementById("video-container").style.display = "block";
         document.querySelector("#avatar img").src = generateAvatar(id);
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        document.getElementById('localVideo').srcObject = localStream;
+
         call = peer.call(room, localStream);
         handleCall(call);
       });
@@ -220,6 +253,7 @@
       if (localStream) localStream.getTracks().forEach(t => t.stop());
       logStatus("Call Ended");
       document.getElementById("call-controls").style.display = "none";
+      document.getElementById("video-container").style.display = "none";
     }
 
     function shareLink() {
@@ -229,6 +263,7 @@
       });
     }
 
+    // Auto join if room param exists
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("room")) {
       document.getElementById("roomId").value = urlParams.get("room");
