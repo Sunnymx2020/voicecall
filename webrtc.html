@@ -1,115 +1,126 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
   <title>Video + Voice Call App</title>
   <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #f9f9f9;
+      background-color: #f0f4f8;
       color: #333;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
+      padding: 20px;
       height: 100vh;
       margin: 0;
     }
+
     #controls, #call-controls, #status, #avatar, #roominfo {
-      margin: 10px;
+      margin: 10px 0;
+      text-align: center;
     }
-    #call-controls {
-      display: none;
+
+    input {
+      padding: 12px 16px;
+      font-size: 16px;
+      width: 100%;
+      max-width: 300px;
+      border-radius: 8px;
+      border: 1.5px solid #ccc;
+      outline: none;
+      margin-bottom: 10px;
     }
+
     button {
-      padding: 10px 24px;
-      margin: 5px;
+      width: 90%;
+      max-width: 300px;
+      padding: 12px;
       font-size: 16px;
       background-color: #4a90e2;
       color: white;
       border: none;
       border-radius: 8px;
+      margin: 5px auto;
       cursor: pointer;
-      box-shadow: 0 3px 6px rgba(74,144,226,0.3);
+      box-shadow: 0 3px 6px rgba(74, 144, 226, 0.3);
       transition: background-color 0.3s ease;
+      display: block;
     }
+
     button:hover {
       background-color: #357ABD;
     }
-    input {
-      padding: 10px 14px;
-      font-size: 16px;
-      width: 250px;
-      border-radius: 8px;
-      border: 1.5px solid #ccc;
-      outline: none;
-      transition: border-color 0.3s ease;
-      box-sizing: border-box;
-    }
-    input:focus {
-      border-color: #4a90e2;
-    }
+
     #avatar img {
-      width: 64px;
-      height: 64px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
       border: 2px solid #4a90e2;
       box-shadow: 0 2px 5px rgba(74,144,226,0.3);
     }
+
     #status {
       font-weight: 600;
       font-size: 18px;
       min-height: 24px;
     }
+
     #roominfo {
       font-size: 18px;
       font-weight: 600;
+      word-break: break-word;
     }
 
-    /* Video container styling */
-    #video-container {
+    #call-controls {
       display: none;
-      margin-top: 15px;
-      display: flex;
-      gap: 15px;
-      align-items: center;
-      justify-content: center;
     }
-    #localVideo, #remoteVideo {
-      border-radius: 12px;
-      border: 2px solid #4a90e2;
-      box-shadow: 0 3px 8px rgba(74,144,226,0.4);
-      background-color: black;
-      object-fit: cover;
+
+    video {
+      width: 100%;
+      max-width: 300px;
+      border-radius: 8px;
+      margin-top: 10px;
     }
-    #localVideo {
-      width: 160px;
-      height: 120px;
-    }
-    #remoteVideo {
-      width: 320px;
-      height: 240px;
+
+    @media screen and (max-width: 480px) {
+      body {
+        padding: 10px;
+      }
+
+      input, button {
+        font-size: 14px;
+        padding: 10px;
+      }
+
+      #avatar img {
+        width: 60px;
+        height: 60px;
+      }
+
+      video {
+        max-width: 100%;
+      }
     }
   </style>
 </head>
 <body>
   <div id="controls">
-    <input type="text" id="roomId" placeholder="Enter Room ID or Name" />
-    <br />
+    <input type="text" id="roomId" placeholder="Enter Room ID or Name">
     <button onclick="createRoom()">Create Room</button>
     <button onclick="joinRoom()">Join Room</button>
   </div>
+
   <div id="status">Initializing...</div>
   <div id="roominfo" style="display:none;"></div>
   <div id="avatar" style="display:none;">
     <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=User" />
-  </div>
-
-  <!-- Video Elements -->
-  <div id="video-container">
-    <video id="localVideo" autoplay muted playsinline></video>
-    <video id="remoteVideo" autoplay playsinline></video>
   </div>
 
   <div id="call-controls">
@@ -117,6 +128,10 @@
     <button onclick="endCall()">End Call</button>
     <button onclick="shareLink()">Share</button>
   </div>
+
+  <!-- Optionally add video tag (if needed in future) -->
+  <!-- <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video> -->
 
   <script>
     let peer;
@@ -136,7 +151,7 @@
     async function initPeer(id = undefined) {
       peer = new Peer(id);
 
-      peer.on("open", (id) => {
+      peer.on('open', (id) => {
         room = id;
         document.getElementById("roominfo").innerText = `Room: ${room}`;
         document.getElementById("roominfo").style.display = "block";
@@ -147,11 +162,8 @@
         logStatus("Waiting for user to join...");
       });
 
-      peer.on("call", async (incomingCall) => {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
+      peer.on('call', async (incomingCall) => {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         incomingCall.answer(localStream);
         handleCall(incomingCall);
       });
@@ -159,26 +171,11 @@
 
     function handleCall(activeCall) {
       call = activeCall;
-
-      // Show video container
-      document.getElementById("video-container").style.display = "flex";
-
-      // Show local video
-      const localVideo = document.getElementById("localVideo");
-      localVideo.srcObject = localStream;
-      localVideo.play();
-
-      // When remote stream received
-      call.on("stream", (remoteStream) => {
-        const remoteVideo = document.getElementById("remoteVideo");
-        remoteVideo.srcObject = remoteStream;
-        remoteVideo.play();
+      call.on('stream', (remoteStream) => {
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.play();
         logStatus("Connected");
-      });
-
-      call.on("close", () => {
-        logStatus("Call ended");
-        document.getElementById("video-container").style.display = "none";
       });
     }
 
@@ -196,7 +193,7 @@
 
       peer = new Peer();
 
-      peer.on("open", async (id) => {
+      peer.on('open', async (id) => {
         room = roomId;
         document.getElementById("roominfo").innerText = `Connected to: ${room}`;
         document.getElementById("roominfo").style.display = "block";
@@ -204,12 +201,7 @@
         document.getElementById("call-controls").style.display = "block";
         document.getElementById("avatar").style.display = "block";
         document.querySelector("#avatar img").src = generateAvatar(id);
-
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
-
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         call = peer.call(room, localStream);
         handleCall(call);
       });
@@ -217,21 +209,17 @@
 
     function toggleMic() {
       if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        if (audioTrack) {
-          audioTrack.enabled = !audioTrack.enabled;
-          micOn = audioTrack.enabled;
-          logStatus(micOn ? "Mic On" : "Mic Muted");
-        }
+        localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
+        micOn = !micOn;
+        logStatus(micOn ? "Mic On" : "Mic Muted");
       }
     }
 
     function endCall() {
       if (call) call.close();
-      if (localStream) localStream.getTracks().forEach((t) => t.stop());
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
       logStatus("Call Ended");
       document.getElementById("call-controls").style.display = "none";
-      document.getElementById("video-container").style.display = "none";
     }
 
     function shareLink() {
@@ -241,7 +229,6 @@
       });
     }
 
-    // Auto-join if room ID is in URL
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("room")) {
       document.getElementById("roomId").value = urlParams.get("room");
